@@ -5,6 +5,8 @@ from typing import List, Optional
 
 from .domain import LostItem, Claim
 from .firestore_client import get_firestore_client
+from google.cloud import firestore
+
 
 
 class LostItemRepository(ABC):
