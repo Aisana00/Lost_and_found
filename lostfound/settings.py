@@ -12,6 +12,8 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 
+import os
+from dotenv import load_dotenv
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -122,3 +124,19 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+load_dotenv(BASE_DIR / ".env")
+
+# ------------ Firebase / Firestore ------------
+FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "lost-and-found-d7a43")
+FIREBASE_CREDENTIALS_FILE = os.getenv(
+    "FIREBASE_CREDENTIALS_FILE",
+    "C:/LostAndFound/Lost_and_found/lost-and-found-d7a43-firebase-adminsdk-fbsvc-c066b542b0.json",
+)
+
+# ------------------- Stripe -------------------
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "sk_test_51RMP6sQPF9VA2MpwidbzQVym0Yg9fIkMP8z8wUpuo37HjHNzCj7VGYv4ipDqq0dytq5TEtVWKZFADETtreo49jHj00qvDhAlhK")
+STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY", "pk_test_51RMP6sQPF9VA2MpwMsgFmYamJQJTUaw8CXUAqJdkuDmDiHWoypviqmtiUsN0EySkx4LADoYqzewYWk72T3LMEE7y00Hhfnb6ac")
+STRIPE_SUCCESS_URL = os.getenv("STRIPE_SUCCESS_URL", "http://localhost:8000/success")
+STRIPE_CANCEL_URL = os.getenv("STRIPE_CANCEL_URL", "http://localhost:8000/cancel")
