@@ -1,15 +1,14 @@
-# core/firestore_client.py
 import os
 from google.cloud import firestore
 from google.oauth2 import service_account
-from django.conf import settings
+from dotenv import load_dotenv
 
+load_dotenv()  # чтобы прочитать .env
 
-def get_firestore_client() -> firestore.Client:
-    credentials = service_account.Credentials.from_service_account_file(
-        settings.FIREBASE_CREDENTIALS_FILE
-    )
-    return firestore.Client(
-        project=settings.FIREBASE_PROJECT_ID,
-        credentials=credentials,
-    )
+def get_firestore_client():
+    cred_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+    if not cred_path:
+        raise RuntimeError("Переменная GOOGLE_APPLICATION_CREDENTIALS не задана")
+
+    credentials = service_account.Credentials.from_service_account_file(cred_path)
+    return firestore.Client(credentials=credentials)
