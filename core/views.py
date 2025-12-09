@@ -2,8 +2,10 @@
 import json
 from django.http import JsonResponse, HttpRequest
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import csrf_exempt
 
-from . import lost_item_service, claim_service, payment_service
+from .repositories import FirestoreLostItemRepository, FirestoreClaimRepository
+from .services import LostItemService, ClaimService, PaymentService
 
 
 def _parse_json_body(request: HttpRequest) -> dict:
@@ -13,8 +15,33 @@ def _parse_json_body(request: HttpRequest) -> dict:
         return {}
 
 
+def get_lost_item_service() -> LostItemService:
+    return LostItemService(FirestoreLostItemRepository())
+
+
+def get_claim_service() -> ClaimService:
+    item_repo = FirestoreLostItemRepository()
+    claim_repo = FirestoreClaimRepository()
+    return ClaimService(item_repo, claim_repo)
+
+
+def get_payment_service() -> PaymentService:
+    return PaymentService()
+
+
+@csrf_exempt
 @require_http_methods(["POST"])
 def create_item_view(request: HttpRequest):
+    """
+    POST /api/items/
+
+    {
+      "title": "Backpack",
+      "description": "Black backpack with laptop",
+      "location": "Almaty, Mega",
+      "finder_contact": "+7 777 000 00 00"
+    }
+    """
     data = _parse_json_body(request)
     title = data.get("title")
     description = data.get("description", "")
@@ -24,7 +51,8 @@ def create_item_view(request: HttpRequest):
     if not title or not finder_contact:
         return JsonResponse({"error": "title and finder_contact are required"}, status=400)
 
-    item = lost_item_service.create_item(title, description, location, finder_contact)
+    service = get_lost_item_service()
+    item = service.create_item(title, description, location, finder_contact)
     return JsonResponse(
         {
             "id": item.id,
@@ -41,7 +69,11 @@ def create_item_view(request: HttpRequest):
 
 @require_http_methods(["GET"])
 def list_items_view(request: HttpRequest):
-    items = lost_item_service.list_items()
+    """
+    GET /api/items/
+    """
+    service = get_lost_item_service()
+    items = service.list_items()
     data = [
         {
             "id": item.id,
@@ -59,7 +91,11 @@ def list_items_view(request: HttpRequest):
 
 @require_http_methods(["GET"])
 def item_detail_view(request: HttpRequest, item_id: str):
-    item = lost_item_service.get_item(item_id)
+    """
+    GET /api/items/<id>/
+    """
+    service = get_lost_item_service()
+    item = service.get_item(item_id)
     if not item:
         return JsonResponse({"error": "Not found"}, status=404)
 
@@ -78,8 +114,17 @@ def item_detail_view(request: HttpRequest, item_id: str):
     )
 
 
+@csrf_exempt
 @require_http_methods(["POST"])
 def create_claim_view(request: HttpRequest, item_id: str):
+    """
+    POST /api/items/<id>/claim/
+
+    {
+      "owner_contact": "@telegram",
+      "message": "Это мой рюкзак..."
+    }
+    """
     data = _parse_json_body(request)
     owner_contact = data.get("owner_contact")
     message = data.get("message", "")
@@ -87,8 +132,9 @@ def create_claim_view(request: HttpRequest, item_id: str):
     if not owner_contact:
         return JsonResponse({"error": "owner_contact is required"}, status=400)
 
+    service = get_claim_service()
     try:
-        claim = claim_service.create_claim(item_id, owner_contact, message)
+        claim = service.create_claim(item_id, owner_contact, message)
     except ValueError:
         return JsonResponse({"error": "Item not found"}, status=404)
 
@@ -103,10 +149,13 @@ def create_claim_view(request: HttpRequest, item_id: str):
     )
 
 
+@csrf_exempt
 @require_http_methods(["POST"])
 def create_reward_payment_view(request: HttpRequest):
     """
-    Пример: POST { "amount_cents": 500 }
+    POST /api/payments/reward/
+
+    { "amount_cents": 500 }
     """
     data = _parse_json_body(request)
     amount_cents = data.get("amount_cents")
@@ -114,5 +163,6 @@ def create_reward_payment_view(request: HttpRequest):
     if not isinstance(amount_cents, int) or amount_cents <= 0:
         return JsonResponse({"error": "amount_cents must be positive integer"}, status=400)
 
-    checkout_url = payment_service.create_reward_checkout(amount_cents)
+    service = get_payment_service()
+    checkout_url = service.create_reward_checkout(amount_cents)
     return JsonResponse({"checkout_url": checkout_url}, status=201)

@@ -3,10 +3,10 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import List, Optional
 
-from .domain import LostItem, Claim
-from .firestore_client import get_firestore_client
 from google.cloud import firestore
 
+from .domain import LostItem, Claim
+from .firestore_client import get_firestore_client
 
 
 class LostItemRepository(ABC):
@@ -30,14 +30,14 @@ class LostItemRepository(ABC):
 
 
 class FirestoreLostItemRepository(LostItemRepository):
-    """Конкретная реализация для Firestore."""
+    """Реализация репозитория вещей на Firestore."""
 
     def __init__(self):
         self.client = get_firestore_client()
-        self.collection = self.client.collection("lost_items")
+        self.collection = self.client.collection("lost_items")  # коллекция создастся автоматически при первой записи
 
-    def _doc_to_entity(self, doc) -> LostItem:
-        data = doc.to_dict()
+    def _doc_to_entity(self, doc: firestore.DocumentSnapshot) -> LostItem:
+        data = doc.to_dict() or {}
         return LostItem(
             id=doc.id,
             title=data["title"],
@@ -52,7 +52,7 @@ class FirestoreLostItemRepository(LostItemRepository):
 
     def create(self, title: str, description: str, location: str, finder_contact: str) -> LostItem:
         now = datetime.utcnow()
-        doc_ref = self.collection.document()
+        doc_ref = self.collection.document()  # создаём новый ID
         doc_ref.set(
             {
                 "title": title,
@@ -75,7 +75,10 @@ class FirestoreLostItemRepository(LostItemRepository):
         )
 
     def list_all(self) -> List[LostItem]:
-        docs = self.collection.order_by("created_at", direction=firestore.Query.DESCENDING).stream()
+        docs = (
+            self.collection.order_by("created_at", direction=firestore.Query.DESCENDING)
+            .stream()
+        )
         return [self._doc_to_entity(doc) for doc in docs]
 
     def get_by_id(self, item_id: str) -> Optional[LostItem]:
@@ -85,7 +88,7 @@ class FirestoreLostItemRepository(LostItemRepository):
         return self._doc_to_entity(doc)
 
     def save(self, item: LostItem) -> None:
-        self.collection.document(item.id).update(
+        self.collection.document(item.id).set(
             {
                 "title": item.title,
                 "description": item.description,
@@ -95,12 +98,13 @@ class FirestoreLostItemRepository(LostItemRepository):
                 "claimed": item.claimed,
                 "owner_message": item.owner_message,
                 "owner_contact": item.owner_contact,
-            }
+            },
+            merge=True,
         )
 
 
 class ClaimRepository(ABC):
-    """Интерфейс репозитория заявок на вещь (чтобы отделить ответственность)."""
+    """Интерфейс репозитория заявок владельцев."""
 
     @abstractmethod
     def create(self, item_id: str, owner_contact: str, message: str) -> Claim:
@@ -108,6 +112,8 @@ class ClaimRepository(ABC):
 
 
 class FirestoreClaimRepository(ClaimRepository):
+    """Репозиторий заявок в коллекции 'claims'."""
+
     def __init__(self):
         self.client = get_firestore_client()
         self.collection = self.client.collection("claims")

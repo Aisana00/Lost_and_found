@@ -1,12 +1,13 @@
 # core/services.py
-from typing import List
+from typing import List, Optional
+
 from .domain import LostItem, Claim
 from .repositories import LostItemRepository, ClaimRepository
 from .stripe_client import create_checkout_session
 
 
 class LostItemService:
-    """Сервис для логики вокруг найденных вещей."""
+    """Бизнес-логика вокруг найденных вещей."""
 
     def __init__(self, repo: LostItemRepository):
         self.repo = repo
@@ -17,12 +18,12 @@ class LostItemService:
     def list_items(self) -> List[LostItem]:
         return self.repo.list_all()
 
-    def get_item(self, item_id: str) -> LostItem | None:
+    def get_item(self, item_id: str) -> Optional[LostItem]:
         return self.repo.get_by_id(item_id)
 
 
 class ClaimService:
-    """Сервис для заявок владельцев."""
+    """Логика заявок владельцев на вещи."""
 
     def __init__(self, item_repo: LostItemRepository, claim_repo: ClaimRepository):
         self.item_repo = item_repo
@@ -33,7 +34,6 @@ class ClaimService:
         if item is None:
             raise ValueError("Item not found")
 
-        # помечаем вещь как заявленную
         item.claimed = True
         item.owner_contact = owner_contact
         item.owner_message = message
@@ -43,10 +43,7 @@ class ClaimService:
 
 
 class PaymentService:
-    """Сервис для работы с Stripe (например, награда нашедшему)."""
+    """Логика работы с платежами (Stripe)."""
 
     def create_reward_checkout(self, amount_cents: int) -> str:
-        """
-        Возвращает URL Stripe Checkout.
-        """
         return create_checkout_session(amount_cents)
