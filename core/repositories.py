@@ -1,9 +1,9 @@
 # core/repositories.py
 from abc import ABC, abstractmethod
-from datetime import datetime
 from typing import List, Optional
 
 from google.cloud import firestore
+from django.utils import timezone
 
 from .domain import LostItem, Claim
 from .firestore_client import get_firestore_client
@@ -44,14 +44,14 @@ class FirestoreLostItemRepository(LostItemRepository):
             description=data.get("description", ""),
             location=data.get("location", ""),
             finder_contact=data.get("finder_contact", ""),
-            created_at=data.get("created_at", datetime.utcnow()),
+            created_at=data.get("created_at", timezone.now()),
             claimed=data.get("claimed", False),
             owner_message=data.get("owner_message"),
             owner_contact=data.get("owner_contact"),
         )
 
     def create(self, title: str, description: str, location: str, finder_contact: str) -> LostItem:
-        now = datetime.utcnow()
+        now = timezone.now()
         doc_ref = self.collection.document()  # создаём новый ID
         doc_ref.set(
             {
@@ -119,7 +119,7 @@ class FirestoreClaimRepository(ClaimRepository):
         self.collection = self.client.collection("claims")
 
     def create(self, item_id: str, owner_contact: str, message: str) -> Claim:
-        now = datetime.utcnow()
+        now = timezone.now()
         doc_ref = self.collection.document()
         doc_ref.set(
             {

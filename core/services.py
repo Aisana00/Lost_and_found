@@ -6,6 +6,10 @@ from .repositories import LostItemRepository, ClaimRepository
 from .stripe_client import create_checkout_session
 
 
+class ItemAlreadyClaimedError(Exception):
+    """Вещь уже помечена как забранная/затребованная владельцем."""
+
+
 class LostItemService:
     """Бизнес-логика вокруг найденных вещей."""
 
@@ -33,6 +37,9 @@ class ClaimService:
         item = self.item_repo.get_by_id(item_id)
         if item is None:
             raise ValueError("Item not found")
+
+        if item.claimed:
+            raise ItemAlreadyClaimedError("Item already claimed")
 
         item.claimed = True
         item.owner_contact = owner_contact
