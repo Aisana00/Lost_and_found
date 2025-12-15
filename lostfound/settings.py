@@ -40,7 +40,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     
-    "core",
+    "core.apps.CoreConfig",
 ]
 
 MIDDLEWARE = [
@@ -126,14 +126,11 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
-load_dotenv(BASE_DIR / ".env")
+load_dotenv(BASE_DIR / ".env", override=True)
 
 # ------------ Firebase / Firestore ------------
 FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "lost-and-found-d7a43")
-FIREBASE_CREDENTIALS_FILE = os.getenv(
-    "FIREBASE_CREDENTIALS_FILE",
-    "C:/LostAndFound/Lost_and_found/lost-and-found-d7a43-firebase-adminsdk-fbsvc-c066b542b0.json",
-)
+FIREBASE_CREDENTIALS_FILE = os.getenv("FIREBASE_CREDENTIALS_FILE",)
 
 # ------------------- Stripe -------------------
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "sk_test_51RMP6sQPF9VA2MpwidbzQVym0Yg9fIkMP8z8wUpuo37HjHNzCj7VGYv4ipDqq0dytq5TEtVWKZFADETtreo49jHj00qvDhAlhK")
