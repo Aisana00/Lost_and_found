@@ -31,4 +31,6 @@ def verify_firebase_token(id_token: str) -> dict:
     Бросает исключения firebase_admin.auth при невалидном токене.
     """
     app = _get_app()
-    return auth.verify_id_token(id_token, app=app)
+    # clock_skew_seconds даёт допуск на небольшое расхождение часов (например, на эмуляторах/устройствах)
+    return auth.verify_id_token(id_token, app=app, clock_skew_seconds=60)
+

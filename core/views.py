@@ -1,5 +1,6 @@
 # core/views.py
 import json
+import logging
 from typing import Optional, Tuple, Dict, Any
 from django.http import JsonResponse, HttpRequest
 from django.views.decorators.http import require_http_methods
@@ -24,6 +25,7 @@ def _parse_json_body(request: HttpRequest) -> dict:
 
 
 def _require_firebase_user(request: HttpRequest) -> Tuple[Optional[Dict[str, Any]], Optional[JsonResponse]]:
+    logger = logging.getLogger(__name__)
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
         return None, JsonResponse({"error": "unauthorized", "detail": "Missing Bearer token"}, status=401)
@@ -34,9 +36,11 @@ def _require_firebase_user(request: HttpRequest) -> Tuple[Optional[Dict[str, Any
 
     try:
         claims = verify_firebase_token(token)
-    except (firebase_auth.InvalidIdTokenError, firebase_auth.ExpiredIdTokenError, firebase_auth.RevokedIdTokenError):
+    except (firebase_auth.InvalidIdTokenError, firebase_auth.ExpiredIdTokenError, firebase_auth.RevokedIdTokenError) as exc:
+        logger.exception("Firebase auth failed (invalid/expired/revoked)")
         return None, JsonResponse({"error": "unauthorized", "detail": "Invalid or expired token"}, status=401)
     except Exception as exc:
+        logger.exception("Firebase auth failed (unexpected)")
         return None, JsonResponse({"error": "unauthorized", "detail": str(exc)}, status=401)
 
     return claims, None

@@ -1,0 +1,16 @@
+from firebase_admin import auth, credentials, initialize_app, _apps
+
+cred = credentials.Certificate(
+    r"C:/LostAndFound/Lost_and_found/credentials/lost-and-found-d7a43-firebase-adminsdk-fbsvc-2b31600a7d.json"
+)
+
+if not _apps:
+    initialize_app(cred, {"projectId": "lost-and-found-d7a43"})
+
+token = "eyJhbGciOiJSUzI1NiIsImtpZCI6IjM4MTFiMDdmMjhiODQxZjRiNDllNDgyNTg1ZmQ2NmQ1NWUzOGRiNWQiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL3NlY3VyZXRva2VuLmdvb2dsZS5jb20vbG9zdC1hbmQtZm91bmQtZDdhNDMiLCJhdWQiOiJsb3N0LWFuZC1mb3VuZC1kN2E0MyIsImF1dGhfdGltZSI6MTc2NTg0MjgyMCwidXNlcl9pZCI6InRSVjZLRVRld3JaSWFrMVRjRGpNM0N1WUpDazEiLCJzdWIiOiJ0UlY2S0VUZXdyWklhazFUY0RqTTNDdVlKQ2sxIiwiaWF0IjoxNzY1ODQyODIwLCJleHAiOjE3NjU4NDY0MjAsImVtYWlsIjoibWFnemhhbm1uYXpoYXRkaW5AZ21haWwuY29tIiwiZW1haWxfdmVyaWZpZWQiOmZhbHNlLCJmaXJlYmFzZSI6eyJpZGVudGl0aWVzIjp7ImVtYWlsIjpbIm1hZ3poYW5tbmF6aGF0ZGluQGdtYWlsLmNvbSJdfSwic2lnbl9pbl9wcm92aWRlciI6InBhc3N3b3JkIn19.CtTOf7OQgpAwN3DSEgQAXk2pyutir9vV5IBbs9g3HtkAhsI80PS76LYNHVdw9A9FSvMefT-1qlhEu-zgl-H-3SGwidzq-0Ms2EzQ1qETUt58mXKKYscI3nvvM9FedRYd8VOqeDQV-kRxa1ld4JTHiLO9jOV5-MNgMPyC1-FmsL3MZwiL7kTauAr0ob3LczARM3je54f_edi-PPm02wMQJSshhsEnEWJHar0BcHw6tBm6KqsqpffEIDqbEkesDuVh0Yx4bjKw3HuiqYNZy-2_fLALr9-3DaWm2aRJsZyhBQNjblHKIHagW6kLavBpba8x4lRlFS0IKEbzhndgtP1N4g"
+
+try:
+    decoded = auth.verify_id_token(token)
+    print("OK", decoded["uid"])
+except Exception as e:
+    import traceback; traceback.print_exc()
