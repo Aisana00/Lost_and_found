@@ -42,3 +42,15 @@ class Chat:
     created_at: datetime
     last_message: Optional[str] = None
     last_message_at: Optional[datetime] = None
+
+
+@dataclass
+class UserProfile:
+    uid: str
+    email: Optional[str]
+    display_name: str = ""
+    city: str = ""
+    about: str = ""
+    language: str = "en"
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None

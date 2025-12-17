@@ -2,18 +2,23 @@
 from typing import List, Optional
 from django.utils import timezone
 
-from .domain import LostItem, Claim, Chat, Message
+from .domain import LostItem, Claim, Chat, Message, UserProfile
 from .repositories import (
     LostItemRepository,
     ClaimRepository,
     ChatRepository,
-    MessageRepository
+    MessageRepository,
+    UserProfileRepository,
 )
 from .stripe_client import create_checkout_session
 
 
 class ItemAlreadyClaimedError(Exception):
     """Вещь уже помечена как забранная/затребованная владельцем."""
+
+
+class SelfActionNotAllowedError(Exception):
+    """Пользователь пытается совершить действие над своим же объектом."""
 
 
 class LostItemService:
@@ -50,6 +55,9 @@ class ClaimService:
         item = self.item_repo.get_by_id(item_id)
         if item is None:
             raise ValueError("Item not found")
+
+        if item.finder_id and claimer_id == item.finder_id:
+            raise SelfActionNotAllowedError("Cannot claim your own item")
 
         if item.claimed:
             raise ItemAlreadyClaimedError("Item already claimed")
@@ -106,6 +114,9 @@ class ChatService:
         if not chat:
             raise ValueError("Chat not found for this item")
 
+        if chat.finder_id and chat.finder_id == chat.claimer_id:
+            raise SelfActionNotAllowedError("Cannot send messages to yourself")
+
         # Verify sender is part of the chat
         if sender_id not in [chat.finder_id, chat.claimer_id]:
             raise ValueError("User is not part of this chat")
@@ -126,6 +137,9 @@ class ChatService:
         if not chat:
             raise ValueError("Chat not found")
 
+        if chat.finder_id and chat.finder_id == chat.claimer_id:
+            raise SelfActionNotAllowedError("Cannot open chat with yourself")
+
         # Verify user is part of the chat
         if user_id not in [chat.finder_id, chat.claimer_id]:
             raise ValueError("User is not part of this chat")
@@ -138,3 +152,55 @@ class PaymentService:
 
     def create_reward_checkout(self, amount_cents: int) -> str:
         return create_checkout_session(amount_cents)
+
+
+class UserProfileService:
+    """Логика работы с профилем пользователя."""
+
+    def __init__(self, repo: UserProfileRepository):
+        self.repo = repo
+
+    def get_or_create(self, uid: str, email: Optional[str]) -> UserProfile:
+        existing = self.repo.get_by_uid(uid)
+        if existing:
+            if email and existing.email != email:
+                existing.email = email
+                existing.updated_at = timezone.now()
+                self.repo.upsert(existing)
+            return existing
+
+        now = timezone.now()
+        profile = UserProfile(
+            uid=uid,
+            email=email,
+            display_name="",
+            city="",
+            about="",
+            language="en",
+            created_at=now,
+            updated_at=now,
+        )
+        return self.repo.upsert(profile)
+
+    def update_profile(
+        self,
+        uid: str,
+        email: Optional[str],
+        display_name: Optional[str] = None,
+        city: Optional[str] = None,
+        about: Optional[str] = None,
+        language: Optional[str] = None,
+    ) -> UserProfile:
+        profile = self.get_or_create(uid, email)
+
+        if display_name is not None:
+            profile.display_name = display_name.strip()
+        if city is not None:
+            profile.city = city.strip()
+        if about is not None:
+            profile.about = about.strip()
+        if language is not None:
+            profile.language = language.strip().lower()
+
+        profile.updated_at = timezone.now()
+        return self.repo.upsert(profile)

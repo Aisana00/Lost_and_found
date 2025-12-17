@@ -12,9 +12,11 @@ from .repositories import (
     FirestoreLostItemRepository,
     FirestoreClaimRepository,
     FirestoreChatRepository,
-    FirestoreMessageRepository
+    FirestoreMessageRepository,
+    FirestoreUserProfileRepository,
 )
-from .services import LostItemService, ClaimService, ChatService, PaymentService, ItemAlreadyClaimedError
+from .services import LostItemService, ClaimService, ChatService, PaymentService, ItemAlreadyClaimedError, UserProfileService
+from .services import SelfActionNotAllowedError
 from .stripe_client import PaymentProviderError
 from .firebase_auth import verify_firebase_token
 
@@ -71,6 +73,102 @@ def get_chat_service() -> ChatService:
 
 def get_payment_service() -> PaymentService:
     return PaymentService()
+
+
+def get_user_profile_service() -> UserProfileService:
+    return UserProfileService(FirestoreUserProfileRepository())
+
+
+def _validate_profile_field(value: Optional[str], *, max_len: int) -> Optional[str]:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError("must be a string")
+    value = value.strip()
+    if len(value) > max_len:
+        raise ValueError(f"max length is {max_len}")
+    return value
+
+
+def _validate_language(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError("language must be a string")
+    value = value.strip().lower()
+    if value not in {"en", "ru", "kk"}:
+        raise ValueError("language must be one of: en, ru, kk")
+    return value
+
+
+@csrf_exempt
+@require_http_methods(["GET", "PATCH", "PUT"])
+def profile_view(request: HttpRequest):
+    """
+    GET /api/profile/
+    PATCH/PUT /api/profile/
+
+    Body example:
+    {
+      "display_name": "Alex",
+      "city": "Almaty",
+      "about": "…"
+    }
+    """
+    user, error = _require_firebase_user(request)
+    if error:
+        return error
+
+    uid = user["uid"]
+    email = user.get("email")
+
+    service = get_user_profile_service()
+
+    if request.method == "GET":
+        try:
+            profile = service.get_or_create(uid, email)
+        except google_exceptions.GoogleAPICallError as exc:
+            return JsonResponse({"error": "storage_unavailable", "detail": str(exc)}, status=502)
+        return JsonResponse(
+            {
+                "uid": profile.uid,
+                "email": profile.email,
+                "display_name": profile.display_name,
+                "city": profile.city,
+                "about": profile.about,
+                "language": profile.language,
+                "created_at": profile.created_at.isoformat() if profile.created_at else None,
+                "updated_at": profile.updated_at.isoformat() if profile.updated_at else None,
+            }
+        )
+
+    data = _parse_json_body(request)
+
+    try:
+        display_name = _validate_profile_field(data.get("display_name"), max_len=50)
+        city = _validate_profile_field(data.get("city"), max_len=50)
+        about = _validate_profile_field(data.get("about"), max_len=500)
+        language = _validate_language(data.get("language"))
+    except ValueError as exc:
+        return JsonResponse({"error": "invalid_profile", "detail": str(exc)}, status=400)
+
+    try:
+        profile = service.update_profile(uid, email, display_name=display_name, city=city, about=about, language=language)
+    except google_exceptions.GoogleAPICallError as exc:
+        return JsonResponse({"error": "storage_unavailable", "detail": str(exc)}, status=502)
+
+    return JsonResponse(
+        {
+            "uid": profile.uid,
+            "email": profile.email,
+            "display_name": profile.display_name,
+            "city": profile.city,
+            "about": profile.about,
+            "language": profile.language,
+            "created_at": profile.created_at.isoformat() if profile.created_at else None,
+            "updated_at": profile.updated_at.isoformat() if profile.updated_at else None,
+        }
+    )
 
 
 @csrf_exempt
@@ -188,6 +286,8 @@ def create_claim_view(request: HttpRequest, item_id: str):
         claim, chat = service.create_claim(item_id, user["uid"])
     except ValueError:
         return JsonResponse({"error": "Item not found"}, status=404)
+    except SelfActionNotAllowedError:
+        return JsonResponse({"error": "forbidden", "detail": "Cannot claim your own item"}, status=403)
     except ItemAlreadyClaimedError:
         return JsonResponse({"error": "Item already claimed"}, status=409)
     except google_exceptions.GoogleAPICallError as exc:
@@ -317,6 +417,8 @@ def get_chat_messages_view(request: HttpRequest, item_id: str):
         messages = service.get_messages(item_id, user["uid"])
     except ValueError as e:
         return JsonResponse({"error": str(e)}, status=403)
+    except SelfActionNotAllowedError as e:
+        return JsonResponse({"error": "forbidden", "detail": str(e)}, status=403)
     except google_exceptions.GoogleAPICallError as exc:
         return JsonResponse({"error": "storage_unavailable", "detail": str(exc)}, status=502)
 
@@ -360,6 +462,8 @@ def send_message_view(request: HttpRequest, item_id: str):
         message = service.send_message(item_id, user["uid"], text)
     except ValueError as e:
         return JsonResponse({"error": str(e)}, status=403)
+    except SelfActionNotAllowedError as e:
+        return JsonResponse({"error": "forbidden", "detail": str(e)}, status=403)
     except google_exceptions.GoogleAPICallError as exc:
         return JsonResponse({"error": "storage_unavailable", "detail": str(exc)}, status=502)
 

@@ -5,7 +5,7 @@ from typing import List, Optional
 from google.cloud import firestore
 from django.utils import timezone
 
-from .domain import LostItem, Claim, Message, Chat
+from .domain import LostItem, Claim, Message, Chat, UserProfile
 from .firestore_client import get_firestore_client
 
 
@@ -314,3 +314,54 @@ class FirestoreMessageRepository(MessageRepository):
                 read=data.get("read", False),
             ))
         return messages
+
+
+class UserProfileRepository(ABC):
+    """Интерфейс репозитория профиля пользователя."""
+
+    @abstractmethod
+    def get_by_uid(self, uid: str) -> Optional[UserProfile]:
+        ...
+
+    @abstractmethod
+    def upsert(self, profile: UserProfile) -> UserProfile:
+        ...
+
+
+class FirestoreUserProfileRepository(UserProfileRepository):
+    """Профиль пользователя в коллекции 'users' (doc id = uid)."""
+
+    def __init__(self):
+        self.client = get_firestore_client()
+        self.collection = self.client.collection("users")
+
+    def get_by_uid(self, uid: str) -> Optional[UserProfile]:
+        doc = self.collection.document(uid).get()
+        if not doc.exists:
+            return None
+        data = doc.to_dict() or {}
+        return UserProfile(
+            uid=uid,
+            email=data.get("email"),
+            display_name=data.get("display_name", ""),
+            city=data.get("city", ""),
+            about=data.get("about", ""),
+            language=data.get("language", "en"),
+            created_at=data.get("created_at"),
+            updated_at=data.get("updated_at"),
+        )
+
+    def upsert(self, profile: UserProfile) -> UserProfile:
+        self.collection.document(profile.uid).set(
+            {
+                "email": profile.email,
+                "display_name": profile.display_name,
+                "city": profile.city,
+                "about": profile.about,
+                "language": profile.language,
+                "created_at": profile.created_at,
+                "updated_at": profile.updated_at,
+            },
+            merge=True,
+        )
+        return profile
