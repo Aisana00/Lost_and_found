@@ -2,7 +2,7 @@
 import json
 import logging
 from typing import Optional, Tuple, Dict, Any
-from django.http import JsonResponse, HttpRequest
+from django.http import JsonResponse, HttpRequest, HttpResponse
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 from google.api_core import exceptions as google_exceptions
@@ -17,6 +17,7 @@ from .repositories import (
 )
 from .services import LostItemService, ClaimService, ChatService, PaymentService, ItemAlreadyClaimedError, UserProfileService
 from .services import SelfActionNotAllowedError
+from .domain import ITEM_CATEGORIES, CATEGORY_CHOICES
 from .stripe_client import PaymentProviderError
 from .firebase_auth import verify_firebase_token
 
@@ -180,7 +181,8 @@ def create_item_view(request: HttpRequest):
     {
       "title": "Backpack",
       "description": "Black backpack with laptop",
-      "location": "Almaty, Mega"
+      "location": "Almaty, Mega",
+      "category": "bags"
     }
     """
     user, error = _require_firebase_user(request)
@@ -191,13 +193,18 @@ def create_item_view(request: HttpRequest):
     title = data.get("title")
     description = data.get("description", "")
     location = data.get("location", "")
+    category = data.get("category", "other")
 
     if not title:
         return JsonResponse({"error": "title is required"}, status=400)
 
+    # Валидация категории
+    if category not in CATEGORY_CHOICES:
+        category = "other"
+
     service = get_lost_item_service()
     try:
-        item = service.create_item(title, description, location, user["uid"])
+        item = service.create_item(title, description, location, user["uid"], category)
     except google_exceptions.GoogleAPICallError as exc:
         return JsonResponse({"error": "storage_unavailable", "detail": str(exc)}, status=502)
 
@@ -210,6 +217,7 @@ def create_item_view(request: HttpRequest):
             "finder_id": item.finder_id,
             "created_at": item.created_at.isoformat(),
             "claimed": item.claimed,
+            "category": item.category,
         },
         status=201,
     )
@@ -219,10 +227,20 @@ def create_item_view(request: HttpRequest):
 def list_items_view(request: HttpRequest):
     """
     GET /api/items/
+    GET /api/items/?category=electronics&date_from=2024-01-01&date_to=2024-12-31
     """
+    # Получаем параметры фильтрации из query string
+    category = request.GET.get("category")
+    date_from = request.GET.get("date_from")
+    date_to = request.GET.get("date_to")
+
     service = get_lost_item_service()
     try:
-        items = service.list_items()
+        # Используем фильтрацию если есть параметры
+        if category or date_from or date_to:
+            items = service.list_items_filtered(category, date_from, date_to)
+        else:
+            items = service.list_items()
     except google_exceptions.GoogleAPICallError as exc:
         return JsonResponse({"error": "storage_unavailable", "detail": str(exc)}, status=502)
 
@@ -235,10 +253,23 @@ def list_items_view(request: HttpRequest):
             "finder_id": item.finder_id,
             "created_at": item.created_at.isoformat(),
             "claimed": item.claimed,
+            "category": item.category,
         }
         for item in items
     ]
     return JsonResponse(data, safe=False)
+
+
+@require_http_methods(["GET"])
+def get_categories_view(request: HttpRequest):
+    """
+    GET /api/categories/
+    Возвращает список доступных категорий.
+    """
+    return JsonResponse(
+        [{"id": cat[0], "name": cat[1]} for cat in ITEM_CATEGORIES],
+        safe=False
+    )
 
 
 @require_http_methods(["GET"])
@@ -264,6 +295,7 @@ def item_detail_view(request: HttpRequest, item_id: str):
             "finder_id": item.finder_id,
             "created_at": item.created_at.isoformat(),
             "claimed": item.claimed,
+            "category": item.category,
         }
     )
 
@@ -337,6 +369,53 @@ def create_reward_payment_view(request: HttpRequest):
 
 
 @require_http_methods(["GET"])
+def stripe_success_view(request: HttpRequest):
+    # Redirect back into the mobile app via deep link. Works well with Custom Tabs / SFSafariViewController.
+    html = """
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Payment successful</title>
+  </head>
+  <body>
+    <h2>Payment successful</h2>
+    <p>Returning to the app…</p>
+    <p><a href="lostandfound://payment/success">Open the app</a></p>
+    <script>
+      window.location.href = "lostandfound://payment/success";
+    </script>
+  </body>
+</html>
+"""
+    return HttpResponse(html, content_type="text/html; charset=utf-8")
+
+
+@require_http_methods(["GET"])
+def stripe_cancel_view(request: HttpRequest):
+    html = """
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Payment canceled</title>
+  </head>
+  <body>
+    <h2>Payment canceled</h2>
+    <p>Returning to the app…</p>
+    <p><a href="lostandfound://payment/cancel">Open the app</a></p>
+    <script>
+      window.location.href = "lostandfound://payment/cancel";
+    </script>
+  </body>
+</html>
+"""
+    return HttpResponse(html, content_type="text/html; charset=utf-8")
+
+
+@require_http_methods(["GET"])
 def list_user_items_view(request: HttpRequest):
     """
     GET /api/items/my/
@@ -368,10 +447,52 @@ def list_user_items_view(request: HttpRequest):
             "finder_id": item.finder_id,
             "created_at": item.created_at.isoformat(),
             "claimed": item.claimed,
+            "category": item.category,
         }
         for item in user_items
     ]
     return JsonResponse(data, safe=False)
+
+
+@require_http_methods(["GET"])
+def list_claimed_items_view(request: HttpRequest):
+    """
+    GET /api/items/claimed/
+
+    Returns items claimed by the authenticated user (claimer).
+    """
+    user, error = _require_firebase_user(request)
+    if error:
+        return error
+
+    uid = user["uid"]
+    claim_repo = FirestoreClaimRepository()
+    item_repo = FirestoreLostItemRepository()
+
+    try:
+        claims = claim_repo.list_by_claimer_id(uid)
+        items = []
+        for claim in claims:
+            item = item_repo.get_by_id(claim.item_id)
+            if not item:
+                continue
+            items.append(
+                {
+                    "id": item.id,
+                    "title": item.title,
+                    "description": item.description,
+                    "location": item.location,
+                    "finder_id": item.finder_id,
+                    "created_at": item.created_at.isoformat(),
+                    "claimed": item.claimed,
+                    "claim_id": claim.id,
+                    "claim_created_at": claim.created_at.isoformat(),
+                }
+            )
+    except google_exceptions.GoogleAPICallError as exc:
+        return JsonResponse({"error": "storage_unavailable", "detail": str(exc)}, status=502)
+
+    return JsonResponse(items, safe=False)
 
 
 @require_http_methods(["GET"])

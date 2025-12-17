@@ -1,0 +1,35 @@
+{% extends "panel/base.html" %}
+
+{% block title %}Create Chat{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Create Chat</h2>
+    <p style="color:#7f8c8d; margin-bottom: 1rem;">
+        Chat is linked to an item. If a chat already exists for the item, you’ll be redirected to it.
+    </p>
+
+    <form method="post">
+        {% csrf_token %}
+
+        <div class="form-group">
+            <label for="item_id">Item ID *</label>
+            <input id="item_id" name="item_id" class="form-control" required />
+        </div>
+
+        <div class="form-group">
+            <label for="finder_id">Finder UID *</label>
+            <input id="finder_id" name="finder_id" class="form-control" required />
+        </div>
+
+        <div class="form-group">
+            <label for="claimer_id">Claimer UID *</label>
+            <input id="claimer_id" name="claimer_id" class="form-control" required />
+        </div>
+
+        <button type="submit" class="btn btn-success">Create</button>
+        <a href="{% url 'admin-chats' %}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+{% endblock %}
+

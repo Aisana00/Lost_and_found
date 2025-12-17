@@ -1,0 +1,51 @@
+{% extends "panel/base.html" %}
+
+{% block title %}Create User{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Create User Profile</h2>
+
+    <form method="post">
+        {% csrf_token %}
+
+        <div class="form-group">
+            <label for="uid">UID *</label>
+            <input id="uid" name="uid" class="form-control" required />
+        </div>
+
+        <div class="form-group">
+            <label for="email">Email</label>
+            <input id="email" name="email" type="email" class="form-control" />
+        </div>
+
+        <div class="form-group">
+            <label for="display_name">Display Name</label>
+            <input id="display_name" name="display_name" class="form-control" />
+        </div>
+
+        <div class="form-group">
+            <label for="city">City</label>
+            <input id="city" name="city" class="form-control" />
+        </div>
+
+        <div class="form-group">
+            <label for="about">About</label>
+            <textarea id="about" name="about" class="form-control"></textarea>
+        </div>
+
+        <div class="form-group">
+            <label for="language">Language</label>
+            <select id="language" name="language" class="form-control">
+                <option value="en">EN</option>
+                <option value="ru">RU</option>
+                <option value="kk">KK</option>
+            </select>
+        </div>
+
+        <button type="submit" class="btn btn-success">Save</button>
+        <a href="{% url 'admin-users' %}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+{% endblock %}
+

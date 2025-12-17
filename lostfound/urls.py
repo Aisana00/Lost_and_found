@@ -15,9 +15,19 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
+from django.conf import settings
 from django.urls import path, include
+from core import views as core_views
+from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path("api/", include("core.urls")),
+    path("success", core_views.stripe_success_view, name="stripe-success"),
+    path("cancel", core_views.stripe_cancel_view, name="stripe-cancel"),
 ]
+
+# Serve static files (including Django admin CSS/JS) when running without DEBUG=True.
+# This is intended for local/dev usage; in production, static files should be served by a web server/CDN.
+if settings.DEBUG is False:
+    urlpatterns += staticfiles_urlpatterns()

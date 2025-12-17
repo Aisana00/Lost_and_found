@@ -1,0 +1,44 @@
+{% extends "panel/base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<h2 style="margin-bottom: 1.5rem;">Dashboard</h2>
+
+{% if stats.error %}
+    <div class="alert alert-error">Ошибка подключения к базе данных: {{ stats.error }}</div>
+{% else %}
+    <div class="stats-grid">
+        <div class="stat-card">
+            <h3>{{ stats.total_items }}</h3>
+            <p>Всего вещей</p>
+        </div>
+        <div class="stat-card">
+            <h3>{{ stats.unclaimed_items }}</h3>
+            <p>Не забраны</p>
+        </div>
+        <div class="stat-card">
+            <h3>{{ stats.claimed_items }}</h3>
+            <p>Забраны</p>
+        </div>
+        <div class="stat-card">
+            <h3>{{ stats.total_users }}</h3>
+            <p>Пользователей</p>
+        </div>
+        <div class="stat-card">
+            <h3>{{ stats.total_messages }}</h3>
+            <p>Сообщений</p>
+        </div>
+    </div>
+
+    <div class="card" style="margin-top: 2rem;">
+        <h2>Quick Links</h2>
+        <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+            <a href="{% url 'admin-items' %}" class="btn btn-primary">Manage Items</a>
+            <a href="{% url 'admin-users' %}" class="btn btn-primary">View Users</a>
+            <a href="{% url 'admin-messages' %}" class="btn btn-primary">View Messages</a>
+        </div>
+    </div>
+{% endif %}
+{% endblock %}
+

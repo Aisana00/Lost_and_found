@@ -1,7 +1,21 @@
 # core/domain.py
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List, Tuple
+
+
+# Категории вещей
+ITEM_CATEGORIES: List[Tuple[str, str]] = [
+    ("electronics", "Электроника"),
+    ("clothing", "Одежда"),
+    ("accessories", "Аксессуары"),
+    ("documents", "Документы"),
+    ("keys", "Ключи"),
+    ("bags", "Сумки/Рюкзаки"),
+    ("other", "Другое"),
+]
+
+CATEGORY_CHOICES = [cat[0] for cat in ITEM_CATEGORIES]
 
 
 @dataclass
@@ -13,6 +27,7 @@ class LostItem:
     finder_id: str  # Firebase UID of finder
     created_at: datetime
     claimed: bool = False
+    category: str = "other"
 
 
 @dataclass

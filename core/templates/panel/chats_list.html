@@ -1,0 +1,74 @@
+{% extends "panel/base.html" %}
+
+{% block title %}Chats{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap: 1rem; flex-wrap: wrap;">
+        <h2 style="margin:0;">Chats</h2>
+        <a href="{% url 'admin-chat-create' %}" class="btn btn-success">Create chat</a>
+    </div>
+
+    <form method="get" class="filters" style="margin-top: 1rem;">
+        <input name="item_id" placeholder="Item ID" value="{{ item_id_filter }}" />
+        <input name="user_id" placeholder="User UID" value="{{ user_id_filter }}" />
+        <button type="submit" class="btn btn-primary">Filter</button>
+        <a href="{% url 'admin-chats' %}" class="btn btn-secondary">Reset</a>
+    </form>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Item</th>
+                <th>Finder</th>
+                <th>Claimer</th>
+                <th>Last message</th>
+                <th>Updated</th>
+                <th>Created</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows %}
+            <tr>
+                <td>
+                    <strong>{{ row.item.title|default:"Unknown" }}</strong><br />
+                    <code style="font-size: 0.8rem;">{{ row.chat.item_id|truncatechars:24 }}</code>
+                </td>
+                <td>
+                    {% if row.finder and row.finder.display_name %}
+                        {{ row.finder.display_name }}
+                    {% elif row.finder and row.finder.email %}
+                        {{ row.finder.email }}
+                    {% else %}
+                        <code style="font-size: 0.8rem;">{{ row.chat.finder_id|truncatechars:20 }}</code>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if row.claimer and row.claimer.display_name %}
+                        {{ row.claimer.display_name }}
+                    {% elif row.claimer and row.claimer.email %}
+                        {{ row.claimer.email }}
+                    {% else %}
+                        <code style="font-size: 0.8rem;">{{ row.chat.claimer_id|truncatechars:20 }}</code>
+                    {% endif %}
+                </td>
+                <td style="max-width: 320px;">
+                    {{ row.chat.last_message|default:"-"|truncatechars:80 }}
+                </td>
+                <td>{{ row.chat.last_message_at|date:"d.m.Y H:i"|default:"-" }}</td>
+                <td>{{ row.chat.created_at|date:"d.m.Y H:i"|default:"-" }}</td>
+                <td>
+                    <a href="{% url 'admin-chat-detail' row.chat.id %}" class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">Open</a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="7" style="text-align: center; color: #7f8c8d;">No chats found</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+

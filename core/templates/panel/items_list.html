@@ -1,0 +1,78 @@
+{% extends "panel/base.html" %}
+
+{% block title %}Items{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap: 1rem; flex-wrap: wrap;">
+        <h2 style="margin:0;">Items Management</h2>
+        <a href="{% url 'admin-item-create' %}" class="btn btn-success">Create item</a>
+    </div>
+
+    <form method="get" class="filters">
+        <select name="category">
+            <option value="">All Categories</option>
+            {% for cat_id, cat_name in categories %}
+                <option value="{{ cat_id }}" {% if category_filter == cat_id %}selected{% endif %}>{{ cat_name }}</option>
+            {% endfor %}
+        </select>
+
+        <select name="claimed">
+            <option value="">All Status</option>
+            <option value="no" {% if claimed_filter == 'no' %}selected{% endif %}>Unclaimed</option>
+            <option value="yes" {% if claimed_filter == 'yes' %}selected{% endif %}>Claimed</option>
+        </select>
+
+        <button type="submit" class="btn btn-primary">Filter</button>
+        <a href="{% url 'admin-items' %}" class="btn btn-secondary">Reset</a>
+    </form>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Category</th>
+                <th>Location</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td><strong>{{ item.title }}</strong></td>
+                <td>
+                    <span class="badge badge-info">
+                        {% for cat_id, cat_name in categories %}
+                            {% if cat_id == item.category %}{{ cat_name }}{% endif %}
+                        {% endfor %}
+                    </span>
+                </td>
+                <td>{{ item.location }}</td>
+                <td>
+                    {% if item.claimed %}
+                        <span class="badge badge-success">Claimed</span>
+                    {% else %}
+                        <span class="badge badge-warning">Unclaimed</span>
+                    {% endif %}
+                </td>
+                <td>{{ item.created_at|date:"d.m.Y H:i" }}</td>
+                <td>
+                    <a href="{% url 'admin-item-edit' item.id %}" class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">Edit</a>
+                    <a href="{% url 'admin-item-messages' item.id %}" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">Messages</a>
+                    <form method="post" action="{% url 'admin-item-delete' item.id %}" style="display: inline;" onsubmit="return confirm('Are you sure?')">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-danger" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="6" style="text-align: center; color: #7f8c8d;">No items found</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

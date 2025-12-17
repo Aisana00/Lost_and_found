@@ -1,11 +1,12 @@
 # core/repositories.py
 from abc import ABC, abstractmethod
 from typing import List, Optional
+from datetime import datetime
 
 from google.cloud import firestore
 from django.utils import timezone
 
-from .domain import LostItem, Claim, Message, Chat, UserProfile
+from .domain import LostItem, Claim, Message, Chat, UserProfile, CATEGORY_CHOICES
 from .firestore_client import get_firestore_client
 
 
@@ -13,11 +14,15 @@ class LostItemRepository(ABC):
     """Интерфейс репозитория для вещей."""
 
     @abstractmethod
-    def create(self, title: str, description: str, location: str, finder_id: str) -> LostItem:
+    def create(self, title: str, description: str, location: str, finder_id: str, category: str = "other") -> LostItem:
         ...
 
     @abstractmethod
     def list_all(self) -> List[LostItem]:
+        ...
+
+    @abstractmethod
+    def list_filtered(self, category: Optional[str] = None, date_from: Optional[str] = None, date_to: Optional[str] = None) -> List[LostItem]:
         ...
 
     @abstractmethod
@@ -26,6 +31,10 @@ class LostItemRepository(ABC):
 
     @abstractmethod
     def save(self, item: LostItem) -> None:
+        ...
+
+    @abstractmethod
+    def delete(self, item_id: str) -> bool:
         ...
 
 
@@ -38,18 +47,47 @@ class FirestoreLostItemRepository(LostItemRepository):
 
     def _doc_to_entity(self, doc: firestore.DocumentSnapshot) -> LostItem:
         data = doc.to_dict() or {}
+
+        title = data.get("title")
+        if not isinstance(title, str) or not title.strip():
+            title = "(untitled)"
+
+        description = data.get("description", "")
+        if not isinstance(description, str):
+            description = str(description)
+
+        location = data.get("location", "")
+        if not isinstance(location, str):
+            location = str(location)
+
+        finder_id = data.get("finder_id", "")
+        if not isinstance(finder_id, str):
+            finder_id = str(finder_id)
+
+        category = data.get("category", "other")
+        if not isinstance(category, str) or category not in CATEGORY_CHOICES:
+            category = "other"
+
+        created_at = data.get("created_at")
+        if not isinstance(created_at, datetime):
+            created_at = timezone.now()
+
         return LostItem(
             id=doc.id,
-            title=data["title"],
-            description=data.get("description", ""),
-            location=data.get("location", ""),
-            finder_id=data.get("finder_id", ""),
-            created_at=data.get("created_at", timezone.now()),
-            claimed=data.get("claimed", False),
+            title=title,
+            description=description,
+            location=location,
+            finder_id=finder_id,
+            created_at=created_at,
+            claimed=bool(data.get("claimed", False)),
+            category=category,
         )
 
-    def create(self, title: str, description: str, location: str, finder_id: str) -> LostItem:
+    def create(self, title: str, description: str, location: str, finder_id: str, category: str = "other") -> LostItem:
         now = timezone.now()
+        # Валидация категории
+        if category not in CATEGORY_CHOICES:
+            category = "other"
         doc_ref = self.collection.document()  # создаём новый ID
         doc_ref.set(
             {
@@ -59,6 +97,7 @@ class FirestoreLostItemRepository(LostItemRepository):
                 "finder_id": finder_id,
                 "created_at": now,
                 "claimed": False,
+                "category": category,
             }
         )
         return LostItem(
@@ -68,6 +107,7 @@ class FirestoreLostItemRepository(LostItemRepository):
             location=location,
             finder_id=finder_id,
             created_at=now,
+            category=category,
         )
 
     def list_all(self) -> List[LostItem]:
@@ -76,6 +116,36 @@ class FirestoreLostItemRepository(LostItemRepository):
             .stream()
         )
         return [self._doc_to_entity(doc) for doc in docs]
+
+    def list_filtered(self, category: Optional[str] = None, date_from: Optional[str] = None, date_to: Optional[str] = None) -> List[LostItem]:
+        """Получить список вещей с фильтрацией."""
+        from datetime import date
+
+        # Получаем все документы и фильтруем в Python
+        # (Firestore ограничен в составных запросах без индексов)
+        items = self.list_all()
+
+        # Фильтр по категории
+        if category and category in CATEGORY_CHOICES:
+            items = [item for item in items if item.category == category]
+
+        # Фильтр по дате "от"
+        if date_from:
+            try:
+                d_from = date.fromisoformat(date_from)
+                items = [item for item in items if item.created_at.date() >= d_from]
+            except ValueError:
+                pass
+
+        # Фильтр по дате "до"
+        if date_to:
+            try:
+                d_to = date.fromisoformat(date_to)
+                items = [item for item in items if item.created_at.date() <= d_to]
+            except ValueError:
+                pass
+
+        return items
 
     def get_by_id(self, item_id: str) -> Optional[LostItem]:
         doc = self.collection.document(item_id).get()
@@ -92,9 +162,19 @@ class FirestoreLostItemRepository(LostItemRepository):
                 "finder_id": item.finder_id,
                 "created_at": item.created_at,
                 "claimed": item.claimed,
+                "category": item.category,
             },
             merge=True,
         )
+
+    def delete(self, item_id: str) -> bool:
+        """Удалить вещь по ID."""
+        doc_ref = self.collection.document(item_id)
+        doc = doc_ref.get()
+        if not doc.exists:
+            return False
+        doc_ref.delete()
+        return True
 
 
 class ClaimRepository(ABC):
@@ -106,6 +186,10 @@ class ClaimRepository(ABC):
 
     @abstractmethod
     def get_by_item_id(self, item_id: str) -> Optional[Claim]:
+        ...
+
+    @abstractmethod
+    def list_by_claimer_id(self, claimer_id: str) -> List[Claim]:
         ...
 
 
@@ -144,6 +228,22 @@ class FirestoreClaimRepository(ClaimRepository):
                 created_at=data.get("created_at", timezone.now()),
             )
         return None
+
+    def list_by_claimer_id(self, claimer_id: str) -> List[Claim]:
+        # Получаем без order_by чтобы избежать требования индекса (Firestore composite index).
+        docs = self.collection.where("claimer_id", "==", claimer_id).stream()
+        claims: List[Claim] = []
+        for doc in docs:
+            data = doc.to_dict() or {}
+            claims.append(
+                Claim(
+                    id=doc.id,
+                    item_id=data.get("item_id", ""),
+                    claimer_id=data.get("claimer_id", ""),
+                    created_at=data.get("created_at", timezone.now()),
+                )
+            )
+        return sorted(claims, key=lambda c: c.created_at, reverse=True)
 
 
 class ChatRepository(ABC):
@@ -254,6 +354,39 @@ class FirestoreChatRepository(ChatRepository):
             merge=True,
         )
 
+    def get_by_id(self, chat_id: str) -> Optional[Chat]:
+        doc = self.collection.document(chat_id).get()
+        if not doc.exists:
+            return None
+        data = doc.to_dict() or {}
+        return Chat(
+            id=doc.id,
+            item_id=data.get("item_id", ""),
+            finder_id=data.get("finder_id", ""),
+            claimer_id=data.get("claimer_id", ""),
+            created_at=data.get("created_at", timezone.now()),
+            last_message=data.get("last_message"),
+            last_message_at=data.get("last_message_at"),
+        )
+
+    def list_all(self) -> List[Chat]:
+        docs = self.collection.stream()
+        chats: List[Chat] = []
+        for doc in docs:
+            data = doc.to_dict() or {}
+            chats.append(
+                Chat(
+                    id=doc.id,
+                    item_id=data.get("item_id", ""),
+                    finder_id=data.get("finder_id", ""),
+                    claimer_id=data.get("claimer_id", ""),
+                    created_at=data.get("created_at", timezone.now()),
+                    last_message=data.get("last_message"),
+                    last_message_at=data.get("last_message_at"),
+                )
+            )
+        return sorted(chats, key=lambda c: c.last_message_at or c.created_at, reverse=True)
+
 
 class MessageRepository(ABC):
     """Интерфейс репозитория сообщений."""
@@ -264,6 +397,14 @@ class MessageRepository(ABC):
 
     @abstractmethod
     def get_by_item_id(self, item_id: str) -> List[Message]:
+        ...
+
+    @abstractmethod
+    def get_all(self) -> List[Message]:
+        ...
+
+    @abstractmethod
+    def get_by_user(self, user_id: str) -> List[Message]:
         ...
 
 
@@ -296,12 +437,25 @@ class FirestoreMessageRepository(MessageRepository):
         )
 
     def get_by_item_id(self, item_id: str) -> List[Message]:
-        docs = (
-            self.collection
-            .where("item_id", "==", item_id)
-            .order_by("created_at", direction=firestore.Query.ASCENDING)
-            .stream()
-        )
+        # Получаем без order_by чтобы избежать требования индекса
+        docs = self.collection.where("item_id", "==", item_id).stream()
+        messages = []
+        for doc in docs:
+            data = doc.to_dict() or {}
+            messages.append(Message(
+                id=doc.id,
+                item_id=data.get("item_id", ""),
+                sender_id=data.get("sender_id", ""),
+                text=data.get("text", ""),
+                created_at=data.get("created_at", timezone.now()),
+                read=data.get("read", False),
+            ))
+        # Сортируем в Python
+        return sorted(messages, key=lambda m: m.created_at)
+
+    def get_all(self) -> List[Message]:
+        """Получить все сообщения (для админки)."""
+        docs = self.collection.order_by("created_at", direction=firestore.Query.DESCENDING).stream()
         messages = []
         for doc in docs:
             data = doc.to_dict() or {}
@@ -315,6 +469,22 @@ class FirestoreMessageRepository(MessageRepository):
             ))
         return messages
 
+    def get_by_user(self, user_id: str) -> List[Message]:
+        """Получить все сообщения пользователя (для админки)."""
+        docs = self.collection.where("sender_id", "==", user_id).stream()
+        messages = []
+        for doc in docs:
+            data = doc.to_dict() or {}
+            messages.append(Message(
+                id=doc.id,
+                item_id=data.get("item_id", ""),
+                sender_id=data.get("sender_id", ""),
+                text=data.get("text", ""),
+                created_at=data.get("created_at", timezone.now()),
+                read=data.get("read", False),
+            ))
+        return sorted(messages, key=lambda m: m.created_at, reverse=True)
+
 
 class UserProfileRepository(ABC):
     """Интерфейс репозитория профиля пользователя."""
@@ -325,6 +495,10 @@ class UserProfileRepository(ABC):
 
     @abstractmethod
     def upsert(self, profile: UserProfile) -> UserProfile:
+        ...
+
+    @abstractmethod
+    def get_all(self) -> List[UserProfile]:
         ...
 
 
@@ -365,3 +539,21 @@ class FirestoreUserProfileRepository(UserProfileRepository):
             merge=True,
         )
         return profile
+
+    def get_all(self) -> List[UserProfile]:
+        """Получить всех пользователей (для админки)."""
+        docs = self.collection.stream()
+        users = []
+        for doc in docs:
+            data = doc.to_dict() or {}
+            users.append(UserProfile(
+                uid=doc.id,
+                email=data.get("email"),
+                display_name=data.get("display_name", ""),
+                city=data.get("city", ""),
+                about=data.get("about", ""),
+                language=data.get("language", "en"),
+                created_at=data.get("created_at"),
+                updated_at=data.get("updated_at"),
+            ))
+        return sorted(users, key=lambda u: u.created_at or timezone.now(), reverse=True)

@@ -27,14 +27,23 @@ class LostItemService:
     def __init__(self, repo: LostItemRepository):
         self.repo = repo
 
-    def create_item(self, title: str, description: str, location: str, finder_id: str) -> LostItem:
-        return self.repo.create(title, description, location, finder_id)
+    def create_item(self, title: str, description: str, location: str, finder_id: str, category: str = "other") -> LostItem:
+        return self.repo.create(title, description, location, finder_id, category)
 
     def list_items(self) -> List[LostItem]:
         return self.repo.list_all()
 
+    def list_items_filtered(self, category: Optional[str] = None, date_from: Optional[str] = None, date_to: Optional[str] = None) -> List[LostItem]:
+        return self.repo.list_filtered(category, date_from, date_to)
+
     def get_item(self, item_id: str) -> Optional[LostItem]:
         return self.repo.get_by_id(item_id)
+
+    def update_item(self, item: LostItem) -> None:
+        self.repo.save(item)
+
+    def delete_item(self, item_id: str) -> bool:
+        return self.repo.delete(item_id)
 
 
 class ClaimService:

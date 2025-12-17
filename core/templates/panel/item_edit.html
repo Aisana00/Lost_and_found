@@ -1,0 +1,60 @@
+{% extends "panel/base.html" %}
+
+{% block title %}Edit Item{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Edit Item</h2>
+
+    <form method="post">
+        {% csrf_token %}
+
+        <div class="form-group">
+            <label for="title">Title</label>
+            <input type="text" name="title" id="title" class="form-control" value="{{ item.title }}" required>
+        </div>
+
+        <div class="form-group">
+            <label for="description">Description</label>
+            <textarea name="description" id="description" class="form-control">{{ item.description }}</textarea>
+        </div>
+
+        <div class="form-group">
+            <label for="location">Location</label>
+            <input type="text" name="location" id="location" class="form-control" value="{{ item.location }}">
+        </div>
+
+        <div class="form-group">
+            <label for="category">Category</label>
+            <select name="category" id="category" class="form-control">
+                {% for cat_id, cat_name in categories %}
+                    <option value="{{ cat_id }}" {% if cat_id == item.category %}selected{% endif %}>{{ cat_name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <div class="checkbox-wrapper">
+                <input type="checkbox" name="claimed" id="claimed" {% if item.claimed %}checked{% endif %}>
+                <label for="claimed" style="margin-bottom: 0;">Claimed</label>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Finder ID</label>
+            <input type="text" class="form-control" value="{{ item.finder_id }}" disabled>
+        </div>
+
+        <div class="form-group">
+            <label>Created At</label>
+            <input type="text" class="form-control" value="{{ item.created_at|date:'d.m.Y H:i' }}" disabled>
+        </div>
+
+        <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+            <button type="submit" class="btn btn-success">Save Changes</button>
+            <a href="{% url 'admin-items' %}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+

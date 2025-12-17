@@ -1,0 +1,52 @@
+{% extends "panel/base.html" %}
+
+{% block title %}All Messages{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>All Messages by User</h2>
+
+    {% if users_messages %}
+        {% for user_id, data in users_messages.items %}
+            <div style="border: 1px solid #ddd; border-radius: 8px; margin-bottom: 1.5rem; overflow: hidden;">
+                <div style="background: #f8f9fa; padding: 1rem; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <strong>
+                            {% if data.user %}
+                                {{ data.user.display_name|default:data.user.email|default:user_id }}
+                            {% else %}
+                                {{ user_id|truncatechars:20 }}
+                            {% endif %}
+                        </strong>
+                        <span class="badge badge-info" style="margin-left: 0.5rem;">{{ data.count }} messages</span>
+                    </div>
+                    <a href="{% url 'admin-user-messages' user_id %}" class="btn btn-primary" style="padding: 0.25rem 0.75rem; font-size: 0.85rem;">View All</a>
+                </div>
+
+                <div style="padding: 1rem; max-height: 300px; overflow-y: auto;">
+                    {% for entry in data.messages|slice:":5" %}
+                        <div style="margin-bottom: 0.75rem;">
+                            <div class="message-bubble">
+                                {{ entry.message.text|truncatechars:200 }}
+                            </div>
+                            <div class="message-meta">
+                                <strong>Item:</strong> {{ entry.item.title|default:"Unknown" }} |
+                                {{ entry.message.created_at|date:"d.m.Y H:i" }}
+                            </div>
+                        </div>
+                    {% endfor %}
+
+                    {% if data.count > 5 %}
+                        <p style="color: #7f8c8d; font-size: 0.9rem; text-align: center;">
+                            + {{ data.count|add:"-5" }} more messages
+                        </p>
+                    {% endif %}
+                </div>
+            </div>
+        {% endfor %}
+    {% else %}
+        <p style="color: #7f8c8d; text-align: center; padding: 2rem;">No messages in the system</p>
+    {% endif %}
+</div>
+{% endblock %}
+

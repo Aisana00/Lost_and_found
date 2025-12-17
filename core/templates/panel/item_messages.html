@@ -1,0 +1,59 @@
+{% extends "panel/base.html" %}
+
+{% block title %}Item Messages{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Messages for item</h2>
+
+    {% if item %}
+        <p style="margin-bottom: 1rem;">
+            <strong>{{ item.title }}</strong>
+            {% if item.location %}<span style="color:#7f8c8d;"> — {{ item.location }}</span>{% endif %}
+            <br />
+            <code style="font-size: 0.85rem;">Item ID: {{ item.id }}</code>
+        </p>
+    {% endif %}
+
+    <div class="card" style="background:#fbfbfb;">
+        <h2 style="margin-bottom: 0.75rem;">Add message</h2>
+        <form method="post">
+            {% csrf_token %}
+            <div class="form-group">
+                <label for="sender_id">Sender UID *</label>
+                <input id="sender_id" name="sender_id" class="form-control" required />
+            </div>
+            <div class="form-group">
+                <label for="text">Text *</label>
+                <textarea id="text" name="text" class="form-control" required></textarea>
+            </div>
+            <button type="submit" class="btn btn-success">Send</button>
+            <a href="{% url 'admin-items' %}" class="btn btn-secondary">Back to items</a>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2>History</h2>
+        {% for row in messages %}
+            <div class="message-bubble">
+                <div style="font-weight: 600;">
+                    {% if row.user and row.user.display_name %}
+                        {{ row.user.display_name }}
+                    {% elif row.user and row.user.email %}
+                        {{ row.user.email }}
+                    {% else %}
+                        {{ row.message.sender_id }}
+                    {% endif %}
+                </div>
+                <div style="white-space: pre-wrap;">{{ row.message.text }}</div>
+                <div class="message-meta">
+                    {{ row.message.created_at|date:"d.m.Y H:i" }}
+                </div>
+            </div>
+        {% empty %}
+            <p style="color:#7f8c8d;">No messages for this item yet.</p>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
+

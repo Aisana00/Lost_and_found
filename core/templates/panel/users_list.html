@@ -1,0 +1,47 @@
+{% extends "panel/base.html" %}
+
+{% block title %}Users{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap: 1rem; flex-wrap: wrap;">
+        <h2 style="margin:0;">Users</h2>
+        <a href="{% url 'admin-user-create' %}" class="btn btn-success">Create user</a>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>UID</th>
+                <th>Email</th>
+                <th>Display Name</th>
+                <th>City</th>
+                <th>Language</th>
+                <th>Created</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+            <tr>
+                <td><code style="font-size: 0.8rem;">{{ user.uid|truncatechars:20 }}</code></td>
+                <td>{{ user.email|default:"-" }}</td>
+                <td>{{ user.display_name|default:"-" }}</td>
+                <td>{{ user.city|default:"-" }}</td>
+                <td>
+                    <span class="badge badge-info">{{ user.language|upper }}</span>
+                </td>
+                <td>{{ user.created_at|date:"d.m.Y H:i"|default:"-" }}</td>
+                <td>
+                    <a href="{% url 'admin-user-messages' user.uid %}" class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">Messages</a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="7" style="text-align: center; color: #7f8c8d;">No users found</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

@@ -1,0 +1,37 @@
+{% extends "panel/base.html" %}
+
+{% block title %}User Messages{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Messages from User</h2>
+
+    <div style="margin-bottom: 1.5rem; padding: 1rem; background: #f8f9fa; border-radius: 8px;">
+        <p><strong>User ID:</strong> <code>{{ user_id }}</code></p>
+        {% if user %}
+            <p><strong>Email:</strong> {{ user.email|default:"-" }}</p>
+            <p><strong>Display Name:</strong> {{ user.display_name|default:"-" }}</p>
+        {% endif %}
+    </div>
+
+    <a href="{% url 'admin-users' %}" class="btn btn-secondary" style="margin-bottom: 1rem;">Back to Users</a>
+
+    {% if messages_with_items %}
+        {% for entry in messages_with_items %}
+            <div style="border: 1px solid #eee; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+                <div class="message-bubble">
+                    {{ entry.message.text }}
+                </div>
+                <div class="message-meta">
+                    <strong>Item:</strong> {{ entry.item.title|default:"Unknown Item" }} |
+                    <strong>Sent:</strong> {{ entry.message.created_at|date:"d.m.Y H:i" }} |
+                    <strong>Read:</strong> {% if entry.message.read %}Yes{% else %}No{% endif %}
+                </div>
+            </div>
+        {% endfor %}
+    {% else %}
+        <p style="color: #7f8c8d; text-align: center; padding: 2rem;">No messages from this user</p>
+    {% endif %}
+</div>
+{% endblock %}
+
