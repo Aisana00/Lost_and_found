@@ -5,7 +5,7 @@ from typing import List, Optional
 from google.cloud import firestore
 from django.utils import timezone
 
-from .domain import LostItem, Claim
+from .domain import LostItem, Claim, Message, Chat
 from .firestore_client import get_firestore_client
 
 
@@ -13,7 +13,7 @@ class LostItemRepository(ABC):
     """Интерфейс репозитория для вещей."""
 
     @abstractmethod
-    def create(self, title: str, description: str, location: str, finder_contact: str) -> LostItem:
+    def create(self, title: str, description: str, location: str, finder_id: str) -> LostItem:
         ...
 
     @abstractmethod
@@ -43,14 +43,12 @@ class FirestoreLostItemRepository(LostItemRepository):
             title=data["title"],
             description=data.get("description", ""),
             location=data.get("location", ""),
-            finder_contact=data.get("finder_contact", ""),
+            finder_id=data.get("finder_id", ""),
             created_at=data.get("created_at", timezone.now()),
             claimed=data.get("claimed", False),
-            owner_message=data.get("owner_message"),
-            owner_contact=data.get("owner_contact"),
         )
 
-    def create(self, title: str, description: str, location: str, finder_contact: str) -> LostItem:
+    def create(self, title: str, description: str, location: str, finder_id: str) -> LostItem:
         now = timezone.now()
         doc_ref = self.collection.document()  # создаём новый ID
         doc_ref.set(
@@ -58,11 +56,9 @@ class FirestoreLostItemRepository(LostItemRepository):
                 "title": title,
                 "description": description,
                 "location": location,
-                "finder_contact": finder_contact,
+                "finder_id": finder_id,
                 "created_at": now,
                 "claimed": False,
-                "owner_message": None,
-                "owner_contact": None,
             }
         )
         return LostItem(
@@ -70,7 +66,7 @@ class FirestoreLostItemRepository(LostItemRepository):
             title=title,
             description=description,
             location=location,
-            finder_contact=finder_contact,
+            finder_id=finder_id,
             created_at=now,
         )
 
@@ -93,11 +89,9 @@ class FirestoreLostItemRepository(LostItemRepository):
                 "title": item.title,
                 "description": item.description,
                 "location": item.location,
-                "finder_contact": item.finder_contact,
+                "finder_id": item.finder_id,
                 "created_at": item.created_at,
                 "claimed": item.claimed,
-                "owner_message": item.owner_message,
-                "owner_contact": item.owner_contact,
             },
             merge=True,
         )
@@ -107,7 +101,11 @@ class ClaimRepository(ABC):
     """Интерфейс репозитория заявок владельцев."""
 
     @abstractmethod
-    def create(self, item_id: str, owner_contact: str, message: str) -> Claim:
+    def create(self, item_id: str, claimer_id: str) -> Claim:
+        ...
+
+    @abstractmethod
+    def get_by_item_id(self, item_id: str) -> Optional[Claim]:
         ...
 
 
@@ -118,20 +116,201 @@ class FirestoreClaimRepository(ClaimRepository):
         self.client = get_firestore_client()
         self.collection = self.client.collection("claims")
 
-    def create(self, item_id: str, owner_contact: str, message: str) -> Claim:
+    def create(self, item_id: str, claimer_id: str) -> Claim:
         now = timezone.now()
         doc_ref = self.collection.document()
         doc_ref.set(
             {
                 "item_id": item_id,
-                "owner_contact": owner_contact,
-                "message": message,
+                "claimer_id": claimer_id,
                 "created_at": now,
             }
         )
         return Claim(
+            id=doc_ref.id,
             item_id=item_id,
-            owner_contact=owner_contact,
-            message=message,
+            claimer_id=claimer_id,
             created_at=now,
         )
+
+    def get_by_item_id(self, item_id: str) -> Optional[Claim]:
+        docs = self.collection.where("item_id", "==", item_id).limit(1).stream()
+        for doc in docs:
+            data = doc.to_dict() or {}
+            return Claim(
+                id=doc.id,
+                item_id=data.get("item_id", ""),
+                claimer_id=data.get("claimer_id", ""),
+                created_at=data.get("created_at", timezone.now()),
+            )
+        return None
+
+
+class ChatRepository(ABC):
+    """Интерфейс репозитория чатов."""
+
+    @abstractmethod
+    def create(self, item_id: str, finder_id: str, claimer_id: str) -> Chat:
+        ...
+
+    @abstractmethod
+    def get_by_item_id(self, item_id: str) -> Optional[Chat]:
+        ...
+
+    @abstractmethod
+    def get_user_chats(self, user_id: str) -> List[Chat]:
+        ...
+
+    @abstractmethod
+    def save(self, chat: Chat) -> None:
+        ...
+
+
+class FirestoreChatRepository(ChatRepository):
+    """Репозиторий чатов в Firestore."""
+
+    def __init__(self):
+        self.client = get_firestore_client()
+        self.collection = self.client.collection("chats")
+
+    def create(self, item_id: str, finder_id: str, claimer_id: str) -> Chat:
+        now = timezone.now()
+        doc_ref = self.collection.document()
+        doc_ref.set(
+            {
+                "item_id": item_id,
+                "finder_id": finder_id,
+                "claimer_id": claimer_id,
+                "created_at": now,
+                "last_message": None,
+                "last_message_at": None,
+            }
+        )
+        return Chat(
+            id=doc_ref.id,
+            item_id=item_id,
+            finder_id=finder_id,
+            claimer_id=claimer_id,
+            created_at=now,
+        )
+
+    def get_by_item_id(self, item_id: str) -> Optional[Chat]:
+        docs = self.collection.where("item_id", "==", item_id).limit(1).stream()
+        for doc in docs:
+            data = doc.to_dict() or {}
+            return Chat(
+                id=doc.id,
+                item_id=data.get("item_id", ""),
+                finder_id=data.get("finder_id", ""),
+                claimer_id=data.get("claimer_id", ""),
+                created_at=data.get("created_at", timezone.now()),
+                last_message=data.get("last_message"),
+                last_message_at=data.get("last_message_at"),
+            )
+        return None
+
+    def get_user_chats(self, user_id: str) -> List[Chat]:
+        # Get chats where user is either finder or claimer
+        docs1 = self.collection.where("finder_id", "==", user_id).stream()
+        docs2 = self.collection.where("claimer_id", "==", user_id).stream()
+
+        chats = []
+        for doc in docs1:
+            data = doc.to_dict() or {}
+            chats.append(Chat(
+                id=doc.id,
+                item_id=data.get("item_id", ""),
+                finder_id=data.get("finder_id", ""),
+                claimer_id=data.get("claimer_id", ""),
+                created_at=data.get("created_at", timezone.now()),
+                last_message=data.get("last_message"),
+                last_message_at=data.get("last_message_at"),
+            ))
+
+        for doc in docs2:
+            data = doc.to_dict() or {}
+            chats.append(Chat(
+                id=doc.id,
+                item_id=data.get("item_id", ""),
+                finder_id=data.get("finder_id", ""),
+                claimer_id=data.get("claimer_id", ""),
+                created_at=data.get("created_at", timezone.now()),
+                last_message=data.get("last_message"),
+                last_message_at=data.get("last_message_at"),
+            ))
+
+        return sorted(chats, key=lambda c: c.last_message_at or c.created_at, reverse=True)
+
+    def save(self, chat: Chat) -> None:
+        self.collection.document(chat.id).set(
+            {
+                "item_id": chat.item_id,
+                "finder_id": chat.finder_id,
+                "claimer_id": chat.claimer_id,
+                "created_at": chat.created_at,
+                "last_message": chat.last_message,
+                "last_message_at": chat.last_message_at,
+            },
+            merge=True,
+        )
+
+
+class MessageRepository(ABC):
+    """Интерфейс репозитория сообщений."""
+
+    @abstractmethod
+    def create(self, item_id: str, sender_id: str, text: str) -> Message:
+        ...
+
+    @abstractmethod
+    def get_by_item_id(self, item_id: str) -> List[Message]:
+        ...
+
+
+class FirestoreMessageRepository(MessageRepository):
+    """Репозиторий сообщений в Firestore."""
+
+    def __init__(self):
+        self.client = get_firestore_client()
+        self.collection = self.client.collection("messages")
+
+    def create(self, item_id: str, sender_id: str, text: str) -> Message:
+        now = timezone.now()
+        doc_ref = self.collection.document()
+        doc_ref.set(
+            {
+                "item_id": item_id,
+                "sender_id": sender_id,
+                "text": text,
+                "created_at": now,
+                "read": False,
+            }
+        )
+        return Message(
+            id=doc_ref.id,
+            item_id=item_id,
+            sender_id=sender_id,
+            text=text,
+            created_at=now,
+            read=False,
+        )
+
+    def get_by_item_id(self, item_id: str) -> List[Message]:
+        docs = (
+            self.collection
+            .where("item_id", "==", item_id)
+            .order_by("created_at", direction=firestore.Query.ASCENDING)
+            .stream()
+        )
+        messages = []
+        for doc in docs:
+            data = doc.to_dict() or {}
+            messages.append(Message(
+                id=doc.id,
+                item_id=data.get("item_id", ""),
+                sender_id=data.get("sender_id", ""),
+                text=data.get("text", ""),
+                created_at=data.get("created_at", timezone.now()),
+                read=data.get("read", False),
+            ))
+        return messages

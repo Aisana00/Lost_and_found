@@ -8,8 +8,13 @@ from django.views.decorators.csrf import csrf_exempt
 from google.api_core import exceptions as google_exceptions
 from firebase_admin import auth as firebase_auth
 
-from .repositories import FirestoreLostItemRepository, FirestoreClaimRepository
-from .services import LostItemService, ClaimService, PaymentService, ItemAlreadyClaimedError
+from .repositories import (
+    FirestoreLostItemRepository,
+    FirestoreClaimRepository,
+    FirestoreChatRepository,
+    FirestoreMessageRepository
+)
+from .services import LostItemService, ClaimService, ChatService, PaymentService, ItemAlreadyClaimedError
 from .stripe_client import PaymentProviderError
 from .firebase_auth import verify_firebase_token
 
@@ -53,7 +58,15 @@ def get_lost_item_service() -> LostItemService:
 def get_claim_service() -> ClaimService:
     item_repo = FirestoreLostItemRepository()
     claim_repo = FirestoreClaimRepository()
-    return ClaimService(item_repo, claim_repo)
+    chat_repo = FirestoreChatRepository()
+    return ClaimService(item_repo, claim_repo, chat_repo)
+
+
+def get_chat_service() -> ChatService:
+    chat_repo = FirestoreChatRepository()
+    message_repo = FirestoreMessageRepository()
+    item_repo = FirestoreLostItemRepository()
+    return ChatService(chat_repo, message_repo, item_repo)
 
 
 def get_payment_service() -> PaymentService:
@@ -64,16 +77,15 @@ def get_payment_service() -> PaymentService:
 @require_http_methods(["POST"])
 def create_item_view(request: HttpRequest):
     """
-    POST /api/items/
+    POST /api/items/create/
 
     {
       "title": "Backpack",
       "description": "Black backpack with laptop",
-      "location": "Almaty, Mega",
-      "finder_contact": "+7 777 000 00 00"
+      "location": "Almaty, Mega"
     }
     """
-    _, error = _require_firebase_user(request)
+    user, error = _require_firebase_user(request)
     if error:
         return error
 
@@ -81,14 +93,13 @@ def create_item_view(request: HttpRequest):
     title = data.get("title")
     description = data.get("description", "")
     location = data.get("location", "")
-    finder_contact = data.get("finder_contact", "")
 
-    if not title or not finder_contact:
-        return JsonResponse({"error": "title and finder_contact are required"}, status=400)
+    if not title:
+        return JsonResponse({"error": "title is required"}, status=400)
 
     service = get_lost_item_service()
     try:
-        item = service.create_item(title, description, location, finder_contact)
+        item = service.create_item(title, description, location, user["uid"])
     except google_exceptions.GoogleAPICallError as exc:
         return JsonResponse({"error": "storage_unavailable", "detail": str(exc)}, status=502)
 
@@ -98,7 +109,7 @@ def create_item_view(request: HttpRequest):
             "title": item.title,
             "description": item.description,
             "location": item.location,
-            "finder_contact": item.finder_contact,
+            "finder_id": item.finder_id,
             "created_at": item.created_at.isoformat(),
             "claimed": item.claimed,
         },
@@ -123,7 +134,7 @@ def list_items_view(request: HttpRequest):
             "title": item.title,
             "description": item.description,
             "location": item.location,
-            "finder_contact": item.finder_contact,
+            "finder_id": item.finder_id,
             "created_at": item.created_at.isoformat(),
             "claimed": item.claimed,
         }
@@ -152,11 +163,9 @@ def item_detail_view(request: HttpRequest, item_id: str):
             "title": item.title,
             "description": item.description,
             "location": item.location,
-            "finder_contact": item.finder_contact,
+            "finder_id": item.finder_id,
             "created_at": item.created_at.isoformat(),
             "claimed": item.claimed,
-            "owner_contact": item.owner_contact,
-            "owner_message": item.owner_message,
         }
     )
 
@@ -167,25 +176,16 @@ def create_claim_view(request: HttpRequest, item_id: str):
     """
     POST /api/items/<id>/claim/
 
-    {
-      "owner_contact": "@telegram",
-      "message": "Это мой рюкзак..."
-    }
+    Creates a claim and automatically creates a chat between finder and claimer.
+    No body needed - claimer is identified by Firebase token.
     """
-    _, error = _require_firebase_user(request)
+    user, error = _require_firebase_user(request)
     if error:
         return error
 
-    data = _parse_json_body(request)
-    owner_contact = data.get("owner_contact")
-    message = data.get("message", "")
-
-    if not owner_contact:
-        return JsonResponse({"error": "owner_contact is required"}, status=400)
-
     service = get_claim_service()
     try:
-        claim = service.create_claim(item_id, owner_contact, message)
+        claim, chat = service.create_claim(item_id, user["uid"])
     except ValueError:
         return JsonResponse({"error": "Item not found"}, status=404)
     except ItemAlreadyClaimedError:
@@ -195,9 +195,9 @@ def create_claim_view(request: HttpRequest, item_id: str):
 
     return JsonResponse(
         {
+            "claim_id": claim.id,
             "item_id": claim.item_id,
-            "owner_contact": claim.owner_contact,
-            "message": claim.message,
+            "chat_id": chat.id,
             "created_at": claim.created_at.isoformat(),
         },
         status=201,
@@ -234,3 +234,143 @@ def create_reward_payment_view(request: HttpRequest):
         return JsonResponse({"error": "payment_provider_error", "detail": str(exc)}, status=502)
 
     return JsonResponse({"checkout_url": checkout_url}, status=201)
+
+
+@require_http_methods(["GET"])
+def list_user_items_view(request: HttpRequest):
+    """
+    GET /api/items/my/
+
+    Returns all items created by the authenticated user.
+    """
+    logger = logging.getLogger(__name__)
+    user, error = _require_firebase_user(request)
+    if error:
+        return error
+
+    logger.info(f"Fetching items for user: {user['uid']}")
+    service = get_lost_item_service()
+    try:
+        all_items = service.list_items()
+        logger.info(f"Total items in database: {len(all_items)}")
+        # Filter items by current user's Firebase UID
+        user_items = [item for item in all_items if item.finder_id == user["uid"]]
+        logger.info(f"User items found: {len(user_items)}")
+    except google_exceptions.GoogleAPICallError as exc:
+        return JsonResponse({"error": "storage_unavailable", "detail": str(exc)}, status=502)
+
+    data = [
+        {
+            "id": item.id,
+            "title": item.title,
+            "description": item.description,
+            "location": item.location,
+            "finder_id": item.finder_id,
+            "created_at": item.created_at.isoformat(),
+            "claimed": item.claimed,
+        }
+        for item in user_items
+    ]
+    return JsonResponse(data, safe=False)
+
+
+@require_http_methods(["GET"])
+def list_user_chats_view(request: HttpRequest):
+    """
+    GET /api/chats/
+
+    Returns all chats for the authenticated user.
+    """
+    user, error = _require_firebase_user(request)
+    if error:
+        return error
+
+    service = get_chat_service()
+    try:
+        chats = service.get_user_chats(user["uid"])
+    except google_exceptions.GoogleAPICallError as exc:
+        return JsonResponse({"error": "storage_unavailable", "detail": str(exc)}, status=502)
+
+    # Convert datetime objects to ISO format
+    for chat in chats:
+        if chat.get("created_at"):
+            chat["created_at"] = chat["created_at"].isoformat()
+        if chat.get("last_message_at"):
+            chat["last_message_at"] = chat["last_message_at"].isoformat()
+
+    return JsonResponse(chats, safe=False)
+
+
+@require_http_methods(["GET"])
+def get_chat_messages_view(request: HttpRequest, item_id: str):
+    """
+    GET /api/chats/<item_id>/messages/
+
+    Returns all messages for a specific chat (identified by item_id).
+    """
+    user, error = _require_firebase_user(request)
+    if error:
+        return error
+
+    service = get_chat_service()
+    try:
+        messages = service.get_messages(item_id, user["uid"])
+    except ValueError as e:
+        return JsonResponse({"error": str(e)}, status=403)
+    except google_exceptions.GoogleAPICallError as exc:
+        return JsonResponse({"error": "storage_unavailable", "detail": str(exc)}, status=502)
+
+    data = [
+        {
+            "id": msg.id,
+            "item_id": msg.item_id,
+            "sender_id": msg.sender_id,
+            "text": msg.text,
+            "created_at": msg.created_at.isoformat(),
+            "read": msg.read,
+        }
+        for msg in messages
+    ]
+
+    return JsonResponse(data, safe=False)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def send_message_view(request: HttpRequest, item_id: str):
+    """
+    POST /api/chats/<item_id>/messages/
+
+    {
+      "text": "Hello, is this still available?"
+    }
+    """
+    user, error = _require_firebase_user(request)
+    if error:
+        return error
+
+    data = _parse_json_body(request)
+    text = data.get("text", "").strip()
+
+    if not text:
+        return JsonResponse({"error": "text is required"}, status=400)
+
+    service = get_chat_service()
+    try:
+        message = service.send_message(item_id, user["uid"], text)
+    except ValueError as e:
+        return JsonResponse({"error": str(e)}, status=403)
+    except google_exceptions.GoogleAPICallError as exc:
+        return JsonResponse({"error": "storage_unavailable", "detail": str(exc)}, status=502)
+
+    return JsonResponse(
+        {
+            "id": message.id,
+            "item_id": message.item_id,
+            "sender_id": message.sender_id,
+            "text": message.text,
+            "created_at": message.created_at.isoformat(),
+            "read": message.read,
+        },
+        status=201,
+    )

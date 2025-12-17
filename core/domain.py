@@ -10,16 +10,35 @@ class LostItem:
     title: str
     description: str
     location: str
-    finder_contact: str
+    finder_id: str  # Firebase UID of finder
     created_at: datetime
     claimed: bool = False
-    owner_message: Optional[str] = None
-    owner_contact: Optional[str] = None
 
 
 @dataclass
 class Claim:
+    id: str
     item_id: str
-    owner_contact: str
-    message: str
+    claimer_id: str  # Firebase UID of person claiming
     created_at: datetime
+
+
+@dataclass
+class Message:
+    id: str
+    item_id: str
+    sender_id: str  # Firebase UID
+    text: str
+    created_at: datetime
+    read: bool = False
+
+
+@dataclass
+class Chat:
+    id: str
+    item_id: str
+    finder_id: str
+    claimer_id: str
+    created_at: datetime
+    last_message: Optional[str] = None
+    last_message_at: Optional[datetime] = None
