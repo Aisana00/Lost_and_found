@@ -57,7 +57,7 @@
 
 <div class="card">
     <h2>History</h2>
-    {% for row in messages %}
+    {% for row in message_rows %}
         <div class="message-bubble">
             <div style="font-weight: 600;">
                 {% if row.user and row.user.display_name %}
@@ -78,4 +78,3 @@
     {% endfor %}
 </div>
 {% endblock %}
-

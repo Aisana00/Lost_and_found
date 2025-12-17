@@ -173,17 +173,17 @@ def admin_item_messages(request: HttpRequest, item_id: str):
                 return redirect("admin-item-messages", item_id=item_id)
 
         msgs = message_repo.get_by_item_id(item_id)
-        enriched = []
+        message_rows = []
         for m in msgs:
             user = user_repo.get_by_uid(m.sender_id)
-            enriched.append({"message": m, "user": user})
+            message_rows.append({"message": m, "user": user})
 
     except google_exceptions.GoogleAPICallError as exc:
         item = None
-        enriched = []
+        message_rows = []
         messages.error(request, f"Ошибка загрузки: {exc}")
 
-    return render(request, "panel/item_messages.html", {"item": item, "messages": enriched})
+    return render(request, "panel/item_messages.html", {"item": item, "message_rows": message_rows})
 
 
 @admin_required
@@ -386,17 +386,17 @@ def admin_chat_detail(request: HttpRequest, chat_id: str):
                 return redirect("admin-chat-detail", chat_id=chat.id)
 
         msgs = message_repo.get_by_item_id(chat.item_id)
-        enriched = []
+        message_rows = []
         for m in msgs:
             user = user_repo.get_by_uid(m.sender_id)
-            enriched.append({"message": m, "user": user})
+            message_rows.append({"message": m, "user": user})
 
     except google_exceptions.GoogleAPICallError as exc:
         chat = None
         item = None
         finder = None
         claimer = None
-        enriched = []
+        message_rows = []
         messages.error(request, f"Ошибка загрузки: {exc}")
 
     return render(request, "panel/chat_detail.html", {
@@ -404,7 +404,7 @@ def admin_chat_detail(request: HttpRequest, chat_id: str):
         "item": item,
         "finder": finder,
         "claimer": claimer,
-        "messages": enriched,
+        "message_rows": message_rows,
     })
 
 
