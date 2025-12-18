@@ -128,12 +128,23 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 load_dotenv(BASE_DIR / ".env", override=True)
 
-# ------------ Firebase / Firestore ------------
-FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "lost-and-found-d7a43")
-FIREBASE_CREDENTIALS_FILE = os.getenv("FIREBASE_CREDENTIALS_FILE",)
+# вверху после load_dotenv(...)
+def env_required(name: str) -> str:
+    val = os.getenv(name)
+    if not val:
+        raise RuntimeError(f"Missing required env var: {name}")
+    return val
 
-# ------------------- Stripe -------------------
-STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "sk_test_51RMP6sQPF9VA2MpwidbzQVym0Yg9fIkMP8z8wUpuo37HjHNzCj7VGYv4ipDqq0dytq5TEtVWKZFADETtreo49jHj00qvDhAlhK")
-STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY", "pk_test_51RMP6sQPF9VA2MpwMsgFmYamJQJTUaw8CXUAqJdkuDmDiHWoypviqmtiUsN0EySkx4LADoYqzewYWk72T3LMEE7y00Hhfnb6ac")
+API_TOKEN = os.getenv("API_TOKEN")  # required; установите в .env
+
+SECRET_KEY = env_required("SECRET_KEY")
+DEBUG = os.getenv("DEBUG", "False").lower() == "true"
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(",") if not DEBUG else ["*"]
+
+FIREBASE_PROJECT_ID = env_required("FIREBASE_PROJECT_ID")
+FIREBASE_CREDENTIALS_FILE = env_required("FIREBASE_CREDENTIALS_FILE")
+
+STRIPE_SECRET_KEY = env_required("STRIPE_SECRET_KEY")
+STRIPE_PUBLISHABLE_KEY = env_required("STRIPE_PUBLISHABLE_KEY")
 STRIPE_SUCCESS_URL = os.getenv("STRIPE_SUCCESS_URL", "http://localhost:8000/success")
 STRIPE_CANCEL_URL = os.getenv("STRIPE_CANCEL_URL", "http://localhost:8000/cancel")
