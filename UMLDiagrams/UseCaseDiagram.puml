@@ -1,0 +1,69 @@
+@startuml
+left to right direction
+skinparam shadowing false
+skinparam roundcorner 14
+skinparam actorStyle awesome
+skinparam backgroundColor #ffffff
+skinparam defaultFontName Inter
+
+skinparam ActorBackgroundColor #f8fafc
+skinparam ActorBorderColor #2563eb
+skinparam ActorFontColor #0f172a
+
+skinparam PackageStyle rectangle
+skinparam PackageBackgroundColor #f1f5f9
+skinparam PackageBorderColor #cbd5e1
+skinparam PackageFontColor #0f172a
+
+skinparam UsecaseBackgroundColor #ffffff
+skinparam UsecaseBorderColor #16a34a
+skinparam UsecaseFontColor #0f172a
+
+skinparam ArrowColor #334155
+
+actor "User" as User
+actor "Admin" as Admin
+actor "Stripe" as Stripe
+
+package "Lost & Found App" as SYS {
+  usecase "Register" as UC_Register
+  usecase "Login" as UC_Login
+  usecase "Reset password" as UC_Reset
+
+  usecase "Browse items" as UC_Browse
+  usecase "View item details" as UC_Details
+  usecase "Add found item" as UC_Add
+  usecase "Claim item" as UC_Claim
+  usecase "Chat about item" as UC_Chat
+  usecase "Edit profile" as UC_Profile
+  usecase "View claimed items" as UC_ClaimedList
+  usecase "Pay reward (Stripe Checkout)" as UC_Pay
+
+  usecase "Moderate items" as UC_ModItems
+  usecase "Manage users" as UC_AdminUsers
+  usecase "Manage chats" as UC_AdminChats
+  usecase "View messages" as UC_AdminMessages
+}
+
+User -[#16a34a]-> UC_Register
+User -[#16a34a]-> UC_Login
+User -[#16a34a]-> UC_Reset
+User -[#16a34a]-> UC_Browse
+User -[#16a34a]-> UC_Details
+User -[#16a34a]-> UC_Add
+User -[#16a34a]-> UC_Claim
+User -[#16a34a]-> UC_Chat
+User -[#16a34a]-> UC_Profile
+User -[#16a34a]-> UC_ClaimedList
+User -[#16a34a]-> UC_Pay
+
+Admin -[#f59e0b]-> UC_ModItems
+Admin -[#f59e0b]-> UC_AdminUsers
+Admin -[#f59e0b]-> UC_AdminChats
+Admin -[#f59e0b]-> UC_AdminMessages
+
+Stripe -[#2563eb]-> UC_Pay
+
+UC_Details .[#64748b].> UC_Browse : <<include>>
+UC_Chat .[#64748b].> UC_Claim : <<include>>
+@enduml

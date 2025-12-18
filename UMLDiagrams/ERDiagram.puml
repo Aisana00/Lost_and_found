@@ -1,0 +1,76 @@
+@startuml
+hide circle
+skinparam linetype ortho
+skinparam shadowing false
+skinparam roundcorner 14
+skinparam backgroundColor #ffffff
+skinparam defaultFontName Inter
+
+skinparam EntityBorderColor #cbd5e1
+skinparam EntityFontColor #0f172a
+skinparam ArrowColor #334155
+
+entity "users" as users #e0f2fe {
+  * uid : string <<PK>>
+  --
+  email : string
+  display_name : string
+  city : string
+  about : string
+  language : string
+  created_at : datetime
+  updated_at : datetime
+}
+
+entity "lost_items" as lost_items #dcfce7 {
+  * id : string <<PK>>
+  --
+  title : string
+  description : string
+  location : string
+  category : string
+  created_at : datetime
+  claimed : bool
+  finder_id : string <<FK>>
+}
+
+entity "claims" as claims #ffedd5 {
+  * id : string <<PK>>
+  --
+  item_id : string <<FK>>
+  claimer_id : string <<FK>>
+  created_at : datetime
+}
+
+entity "chats" as chats #ede9fe {
+  * id : string <<PK>>
+  --
+  item_id : string <<FK>>
+  finder_id : string <<FK>>
+  claimer_id : string <<FK>>
+  created_at : datetime
+  last_message : string
+  last_message_at : datetime
+}
+
+entity "messages" as messages #fee2e2 {
+  * id : string <<PK>>
+  --
+  item_id : string <<FK>>
+  sender_id : string <<FK>>
+  text : string
+  created_at : datetime
+  read : bool
+}
+
+users ||--o{ lost_items : "finder_id"
+lost_items ||--o{ claims : "item_id"
+users ||--o{ claims : "claimer_id"
+
+lost_items ||--o{ chats : "item_id (0..1)"
+users ||--o{ chats : "finder_id"
+users ||--o{ chats : "claimer_id"
+
+lost_items ||--o{ messages : "item_id"
+users ||--o{ messages : "sender_id"
+@enduml
